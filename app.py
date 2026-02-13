@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 # -------------------------------
-# Fetch Movie Poster from TMDB API
+# Fetch Movie Poster
 # -------------------------------
 def fetch_poster(movie_id):
     response = requests.get(
@@ -19,76 +19,63 @@ def fetch_poster(movie_id):
 
 
 # -------------------------------
-# Recommend Function
+# Load Data
+# -------------------------------
+movies_dict = pickle.load(open('movie_dict.pkl', 'rb'))
+movies = pd.DataFrame(movies_dict)
+
+cv = CountVectorizer(max_features=5000, stop_words='english')
+vectors = cv.fit_transform(movies['tags'])   # 🚀 NO .toarray()
+
+
+# -------------------------------
+# Recommend Function (Memory Safe)
 # -------------------------------
 def recommend(movie):
     movie_index = movies[movies['title'] == movie].index[0]
-    distances = similarity[movie_index]
+
+    similarity_scores = cosine_similarity(
+        vectors[movie_index],
+        vectors
+    ).flatten()
 
     movies_list = sorted(
-        list(enumerate(distances)),
+        list(enumerate(similarity_scores)),
         reverse=True,
         key=lambda x: x[1]
     )[1:6]
 
     recommended_movies = []
-    recommended_movies_posters = []
+    recommended_posters = []
 
     for i in movies_list:
         movie_id = movies.iloc[i[0]].movie_id
         recommended_movies.append(movies.iloc[i[0]].title)
-        recommended_movies_posters.append(fetch_poster(movie_id))
+        recommended_posters.append(fetch_poster(movie_id))
 
-    return recommended_movies, recommended_movies_posters
-
-
-# -------------------------------
-# Load Movie Data
-# -------------------------------
-movies_dict = pickle.load(open('movie_dict.pkl', 'rb'))
-movies = pd.DataFrame(movies_dict)
+    return recommended_movies, recommended_posters
 
 
 # -------------------------------
-# Create Vectors (NO similarity.pkl)
+# UI
 # -------------------------------
-cv = CountVectorizer(max_features=5000, stop_words='english')
-vectors = cv.fit_transform(movies['tags']).toarray()
+st.title("🎬 Movie Recommender System")
 
-similarity = cosine_similarity(vectors)
-
-
-# -------------------------------
-# Streamlit UI
-# -------------------------------
-st.title('🎬 Movie Recommender System')
-
-selected_movie_name = st.selectbox(
+selected_movie = st.selectbox(
     "Select a movie",
     movies['title'].values
 )
 
-if st.button('Recommend'):
-    names, posters = recommend(selected_movie_name)
+if st.button("Recommend"):
+    names, posters = recommend(selected_movie)
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    with col1:
-        st.text(names[0])
-        st.image(posters[0])
-
-    with col2:
-        st.text(names[1])
-        st.image(posters[1])
-
-    with col3:
-        st.text(names[2])
-        st.image(posters[2])
-
-    with col4:
-        st.text(names[3])
-        st.image(posters[3])
-
-    with col5:
-        st.text(names[4])
-        st.image(posters[4])
+    for col, name, poster in zip(
+        [col1, col2, col3, col4, col5],
+        names,
+        posters
+    ):
+        with col:
+            st.text(name)
+            st.image(poster)
